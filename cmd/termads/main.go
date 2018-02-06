@@ -155,6 +155,7 @@ func (window *Window) RedrawAll() {
 	window.ActivePanel().DrawCursor()
 	yoff := 10
 	for i, paper := range window.papers {
+		fmt.Println(i)
 		if i > 10 {
 			break
 		}
