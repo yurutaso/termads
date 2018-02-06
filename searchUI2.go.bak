@@ -1,0 +1,374 @@
+package main
+
+import (
+	"fmt"
+	"github.com/nsf/termbox-go"
+	"log"
+)
+
+const (
+	statusExit = -1
+	statusOK   = 1
+)
+
+type Panel interface {
+	Next() *Panel
+	Prev() *Panel
+	DrawText()
+	OnKeyEvent() int
+	SetNextPanel(panel *Panel)
+	SetPrevPanel(panel *Panel)
+}
+
+/* stcut Label
+It is used to show unmodifable text.
+Also, it is used in other Panel interfaces
+such as InputForm and ResultPanel
+*/
+type Label struct {
+	x         int
+	y         int
+	width     int
+	text      string
+	nextPanel interface{}
+	prevPanel interface{}
+}
+
+func NewLabel(x, y, width int, text string) *Label {
+	if width < 0 {
+		width = len(text)
+	}
+	label := &Label{x: x, y: y, width: width, text: text}
+	label.nextPanel = label
+	label.prevPanel = label
+	return label
+}
+
+func (label *Label) Next() *Panel {
+	return label.nextPanel.(*Panel)
+}
+
+func (label *Label) Prev() *Panel {
+	return label.prevPanel.(*Panel)
+}
+
+func (label *Label) DrawText() {
+	if label.width > len(label.text) {
+		drawLine(label.x, label.y, fmt.Sprintf(label.text))
+	} else {
+		drawLine(label.x, label.y, fmt.Sprintf(label.text[0:label.width]))
+	}
+}
+
+func (label *Label) OnKeyEvent() int {
+	return statusOK
+}
+
+func (label *Label) SetNextPanel(panel *Panel) {
+	label.nextPanel = panel
+}
+
+func (label *Label) SetPrevPanel(panel *Panel) {
+	label.prevPanel = panel
+}
+
+/* struct InputForm
+ */
+type InputForm struct {
+	label             *Label
+	cursor            *Cursor
+	name              string
+	storeOverflowText bool
+	modifiable        bool
+}
+
+func NewInputForm(x, y, width int, text string, name string) *InputForm {
+	return &InputForm{label: NewLabel(x, y, width, text), cursor: NewCursor(x, y), storeOverflowText: false, name: name}
+}
+
+func (inputform *InputForm) Next() *Panel {
+	return inputform.label.Next()
+}
+
+func (inputform *InputForm) Prev() *Panel {
+	return inputform.label.Prev()
+}
+
+func (inputform *InputForm) DrawText() {
+	inputform.label.DrawText()
+}
+
+func (inputform *InputForm) SetNextPanel(panel *Panel) {
+	inputform.label.nextPanel = panel
+}
+
+func (inputform *InputForm) SetPrevPanel(panel *Panel) {
+	inputform.label.prevPanel = panel
+}
+
+func (inputform *InputForm) DrawCursor() {
+	if inputform.label.x+inputform.label.width < inputform.cursor.x {
+		termbox.SetCursor(inputform.label.x+inputform.label.width, inputform.cursor.y)
+	} else {
+		termbox.SetCursor(inputform.cursor.x, inputform.cursor.y)
+	}
+}
+
+func (inputform *InputForm) CheckCursorPosition() error {
+	if inputform.label.x > inputform.cursor.x || inputform.GetLastXpos() < inputform.cursor.x {
+		return fmt.Errorf("cursor x position out of range")
+	}
+	return nil
+}
+
+func (inputform *InputForm) InsertText(s string) error {
+	err := inputform.CheckCursorPosition()
+	if err != nil {
+		return err
+	}
+	if inputform.modifiable {
+		if !inputform.storeOverflowText && len(inputform.label.text) == inputform.label.width {
+			return nil
+		}
+		text := inputform.label.text
+		cx := inputform.cursor.x - inputform.label.x
+		switch {
+		case cx == 0:
+			inputform.label.text = s + text
+		case cx == len(text):
+			inputform.label.text += s
+		default:
+			inputform.label.text = text[0:cx] + s + text[cx:]
+		}
+		inputform.MoveCursorRight()
+	}
+	return nil
+}
+
+func (inputform *InputForm) Backspace() error {
+	if len(inputform.label.text) == 0 {
+		return nil
+	}
+	err := inputform.CheckCursorPosition()
+	if err != nil {
+		return err
+	}
+	if inputform.modifiable {
+		text := inputform.label.text
+		cx := inputform.cursor.x - inputform.label.x
+		lx := len(text)
+		switch {
+		case cx == lx:
+			inputform.label.text = text[0 : lx-1]
+			inputform.MoveCursorLeft()
+		case cx == inputform.label.x:
+			break
+		default:
+			inputform.label.text = text[0:cx-1] + text[cx:]
+			inputform.MoveCursorLeft()
+		}
+	}
+	return nil
+}
+
+func (inputform *InputForm) RemoveText() {
+	inputform.label.text = ""
+	inputform.MoveCursorFirst()
+}
+
+func (inputform *InputForm) GetLastXpos() int {
+	return inputform.label.x + len(inputform.label.text)
+}
+
+func (inputform *InputForm) MoveCursorFirst() {
+	inputform.cursor.Set(inputform.label.x, inputform.label.y)
+}
+
+func (inputform *InputForm) MoveCursorLast() {
+	inputform.cursor.Set(inputform.GetLastXpos(), inputform.label.y)
+}
+
+func (inputform *InputForm) MoveCursorLeft() {
+	if inputform.cursor.x > inputform.label.x {
+		inputform.cursor.Left()
+	}
+}
+
+func (inputform *InputForm) MoveCursorRight() {
+	if inputform.cursor.x < inputform.GetLastXpos() {
+		inputform.cursor.Right()
+	}
+}
+
+type ResultPanel struct {
+	x      int
+	y      int
+	text   string
+	width  int
+	cursor *Cursor
+	name   string
+}
+
+/* Window */
+type Window struct {
+	panels []*Panel
+	papers []*Paper
+	data   map[string]string
+	active int
+}
+
+func NewWindow() *Window {
+	return &Window{data: map[string]string{}}
+}
+
+func (window *Window) AddPanel(panel *Panel) {
+	window.panels = append(window.panels, panel)
+	numpanel := len(window.panels)
+	if numpanel > 1 {
+		window.panels[numpanel-1].SetNextPanel(panel)
+		panel.SetPrevPanel(window.panels[numpanel-1])
+	}
+}
+
+func (window *Window) RedrawAll() {
+	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+	for _, panel := range window.panels {
+		panel.DrawText()
+	}
+	termbox.Flush()
+}
+
+/*
+func (window *Window) GetForms() {
+	window.active = 0
+	window.FocusNextForm()
+	i := window.active
+	for key, _ := range window.data {
+		window.data[key] = ""
+	}
+	for {
+		key := window.ActiveInputForm().name
+		val := window.ActiveInputForm().text
+		window.data[key] = val
+		window.FocusNextForm()
+		if i == window.active {
+			break
+		}
+	}
+}
+
+func (window *Window) GetPapersFromADS() error {
+	form := NewForm()
+	for key, val := range window.data {
+		form.Set(key, val)
+	}
+	papers, err := GetLinks(form)
+	window.papers = papers
+	if err != nil {
+		return err
+	}
+	return nil
+}
+*/
+
+func pollEvent() {
+	window := NewWindow()
+	window.AddPanel(NewLabel(0, 0, -1, "Input seach forms, then press <Enter> to get links from ADS."))
+	window.AddPanel(NewLabel(0, 1, -1, "Press <TAB>/<Ctrl-N> or <Ctrl-P> to move between forms."))
+	window.AddPanel(NewLabel(0, 2, -1, "------------------------------------------------------------"))
+	window.AddPanel(NewLabel(0, 3, -1, "   Authors:"))
+	window.AddPanel(NewInputForm(12, 3, 100, "", "author"))
+	/*
+			// Row 1
+			// Row 2
+			NewPanel(0, 4, "start year:"),
+			NewPanelForm(12, 4, 4, "", "start_year"),
+			NewPanel(18, 4, "month:"),
+			NewPanelForm(25, 4, 2, "", "end_mon"),
+			// Row 3
+			NewPanel(0, 5, "  end year:"),
+			NewPanelForm(12, 5, 4, "", "end_year"),
+			NewPanel(18, 5, "month:"),
+			NewPanelForm(25, 5, 2, "", "end_mon"),
+			// Row 4
+			NewPanel(0, 6, "     Title:"),
+			NewPanelForm(12, 6, 100, "", "title"),
+			// Row 5
+			NewPanel(0, 7, "  Abstract:"),
+			NewPanelForm(12, 7, 100, "", "text"),
+			// Row 6
+			NewPanel(0, 8, "------------------------------------------------------------"),
+		}
+	*/
+
+	window.RedrawAll()
+	for {
+		status := window.HandleKeyEventInForm(termbox.PollEvent())
+		if status == statusExit {
+			return
+		}
+		window.RedrawAll()
+	}
+}
+
+func (window *Window) HandleKeyEventInForm(ev termbox.Event) int {
+	switch ev.Type {
+	case termbox.EventKey:
+		switch ev.Key {
+		// Terminate
+		case termbox.KeyEsc, termbox.KeyCtrlC:
+			return statusExit
+		// Send forms to ADS
+		case termbox.KeyEnter:
+			window.GetForms()
+			err := window.GetPapersFromADS()
+			if err != nil {
+				return statusExit
+			}
+		// Motions
+		case termbox.KeyTab, termbox.KeyCtrlN, termbox.KeyArrowDown:
+			window.FocusNextForm()
+		case termbox.KeyCtrlP, termbox.KeyArrowUp:
+			window.FocusPrevForm()
+		case termbox.KeyCtrlF, termbox.KeyArrowRight:
+			window.ActiveInputForm().MoveCursorRight()
+		case termbox.KeyCtrlB, termbox.KeyArrowLeft:
+			window.ActiveInputForm().MoveCursorLeft()
+		case termbox.KeyCtrlE:
+			window.ActiveInputForm().MoveCursorLast()
+		case termbox.KeyCtrlA:
+			window.ActiveInputForm().MoveCursorFirst()
+		// Edit text
+		case termbox.KeyBackspace, termbox.KeyBackspace2:
+			window.ActiveInputForm().Backspace()
+		case termbox.KeySpace:
+			window.ActiveInputForm().InsertText(" ")
+		case termbox.KeyCtrlU:
+			window.ActiveInputForm().RemoveText()
+		default:
+			if ev.Ch != 0 {
+				s := string(ev.Ch)
+				window.ActiveInputForm().InsertText(s)
+			}
+		}
+	}
+	return statusOK
+}
+
+func main() {
+	err := termbox.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer termbox.Close()
+	pollEvent()
+}
+
+func drawLine(x, y int, str string) {
+	color := termbox.ColorDefault
+	bgrcolor := termbox.ColorDefault
+	runes := []rune(str)
+	for i := 0; i < len(runes); i++ {
+		termbox.SetCell(x+i, y, runes[i], color, bgrcolor)
+	}
+}
