@@ -7,6 +7,14 @@ import (
 	"log"
 )
 
+/*
+TODO:
+	1. Page the search result
+	2. Select the result
+	3. Download PDF file of the selected result
+	4. Status bar (window), which shows download status etc.
+*/
+
 const (
 	statusExit     = -1
 	statusContinue = 1
@@ -155,10 +163,6 @@ func (window *Window) RedrawAll() {
 	window.ActivePanel().DrawCursor()
 	yoff := 10
 	for i, paper := range window.papers {
-		fmt.Println(i)
-		if i > 10 {
-			break
-		}
 		drawLine(0, yoff+i, paper.GetBibcode()+" "+paper.AvailableLinkTypes()+" "+paper.GetTitle())
 	}
 	termbox.Flush()
