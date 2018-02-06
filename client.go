@@ -1,4 +1,4 @@
-package main
+package termads
 
 import (
 	"github.com/PuerkitoBio/goquery"

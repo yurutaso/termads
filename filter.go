@@ -1,4 +1,4 @@
-package main
+package termads
 
 type Filter struct {
 	linktypes string

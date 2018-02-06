@@ -1,4 +1,4 @@
-package main
+package termads
 
 import (
 	"fmt"
@@ -35,6 +35,14 @@ func (paper *Paper) GetURL(linktype string) string {
 		return paper.urls[linktype]
 	}
 	return ""
+}
+
+func (paper *Paper) GetBibcode() string {
+	return paper.bibcode
+}
+
+func (paper *Paper) GetTitle() string {
+	return paper.title
 }
 
 func (paper *Paper) SetURL(url string, linktype string) error {

@@ -1,4 +1,4 @@
-package main
+package termads
 
 func Find(papers []*Paper, filter *Filter) [][4]string {
 	result := make([][4]string, 0, len(papers))
