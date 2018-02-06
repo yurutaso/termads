@@ -155,7 +155,7 @@ func (window *Window) RedrawAll() {
 	window.ActivePanel().DrawCursor()
 	yoff := 10
 	for i, paper := range window.papers {
-		if i > 0 {
+		if i > 10 {
 			break
 		}
 		drawLine(0, yoff+i, paper.GetBibcode()+" "+paper.AvailableLinkTypes()+" "+paper.GetTitle())
