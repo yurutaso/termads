@@ -68,7 +68,7 @@ func NewForm() *Form {
 	// Important
 	values.Add(`author`, ``)
 	values.Add(`aut_logic`, `OR`)
-	//values.Add(`aut_req`, `YES`)
+	values.Add(`aut_req`, `YES`)
 	values.Add(`object`, ``)
 	values.Add(`obj_logic`, `OR`)
 	values.Add(`start_mon`, ``)
@@ -78,6 +78,7 @@ func NewForm() *Form {
 	values.Add(`title`, ``)
 	values.Add(`ttl_logic`, `OR`)
 	values.Add(`text`, ``)
+	values.Add(`txt_req`, `YES`)
 	values.Add(`txt_logic`, `OR`)
 	values.Add(`ttl_req`, `YES`)
 	return &Form{keys: keys, values: values}
